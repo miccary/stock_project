@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections import Counter
 from pathlib import Path
 
 import streamlit as st
@@ -33,7 +34,7 @@ def read_recent_scans_from_db(limit: int = 10):
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT scanned_at, source, status, symbol, rows_count, error
+                SELECT scanned_at, source, status, symbol, rows_count, error, payload
                 FROM scan_runs
                 ORDER BY scanned_at DESC
                 LIMIT %s
@@ -45,15 +46,18 @@ def read_recent_scans_from_db(limit: int = 10):
         conn.close()
 
 
-def read_latest_scan_from_db():
-    scans = read_recent_scans_from_db(limit=1)
-    return scans[0] if scans else None
-
-
 def read_latest_scan_from_file():
     if not RESULT_PATH.exists():
         return None
     return json.loads(RESULT_PATH.read_text(encoding="utf-8"))
+
+
+def extract_signals(latest):
+    if not latest:
+        return []
+    if "payload" in latest and isinstance(latest["payload"], dict):
+        return latest["payload"].get("signals", [])
+    return latest.get("signals", [])
 
 
 latest = None
@@ -67,6 +71,8 @@ except Exception as e:
 
 if latest is None:
     latest = read_latest_scan_from_file()
+
+signals = extract_signals(latest)
 
 col1, col2 = st.columns(2)
 
@@ -84,17 +90,24 @@ with col1:
 
 with col2:
     st.subheader("Signals")
-    if latest:
-        if "payload" in latest and isinstance(latest["payload"], dict):
-            signals = latest["payload"].get("signals", [])
-        else:
-            signals = latest.get("signals", [])
-        if signals:
-            st.json(signals)
-        else:
-            st.write("No signals detected.")
+    if signals:
+        st.json(signals)
     else:
-        st.write("No signals yet.")
+        st.write("No signals detected.")
+
+st.subheader("Signal Statistics")
+if signals:
+    type_counter = Counter([s.get("type", "unknown") for s in signals])
+    strength_counter = Counter([s.get("strength", "unknown") for s in signals])
+    stat_col1, stat_col2 = st.columns(2)
+    with stat_col1:
+        st.write("By type")
+        st.json(type_counter)
+    with stat_col2:
+        st.write("By strength")
+        st.json(strength_counter)
+else:
+    st.write("No signal stats yet.")
 
 st.subheader("Recent Scan Records")
 if recent_scans:
