@@ -33,7 +33,8 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:112345@localhost
 
 
 st.set_page_config(page_title="stock_project", layout="wide")
-st.title("stock_project - Phase 1 Dashboard")
+st.title("stock_project")
+st.caption("Phase 1 · Stock research and trading-assist dashboard")
 
 
 def read_recent_scans_from_db(limit: int = 10):
@@ -76,20 +77,8 @@ def get_source_statuses():
         "tushare": "unknown",
         "postgres": "unknown",
     }
-    if ak is not None:
-        try:
-            statuses["akshare"] = "import_ok"
-        except Exception:
-            statuses["akshare"] = "import_fail"
-    else:
-        statuses["akshare"] = "import_fail"
-    if ts is not None:
-        try:
-            statuses["tushare"] = "import_ok"
-        except Exception:
-            statuses["tushare"] = "import_fail"
-    else:
-        statuses["tushare"] = "import_fail"
+    statuses["akshare"] = "import_ok" if ak is not None else "import_fail"
+    statuses["tushare"] = "import_ok" if ts is not None else "import_fail"
     if psycopg2 is not None:
         try:
             conn = psycopg2.connect(DATABASE_URL)
@@ -102,44 +91,46 @@ def get_source_statuses():
     return statuses
 
 
-latest = None
-db_error = None
 recent_scans = []
+db_error = None
 try:
     recent_scans = read_recent_scans_from_db(limit=10)
-    latest = recent_scans[0] if recent_scans else None
 except Exception as e:
     db_error = str(e)
 
-if latest is None:
-    latest = read_latest_scan_from_file()
-
+latest = recent_scans[0] if recent_scans else read_latest_scan_from_file()
 signals = extract_signals(latest)
 source_statuses = get_source_statuses()
 
-# Summary cards
-card1, card2, card3, card4 = st.columns(4)
-with card1:
-    st.metric("Latest Rows", latest.get("rows_count") if isinstance(latest, dict) and latest.get("rows_count") is not None else (latest.get("rows") if isinstance(latest, dict) else "-"))
-with card2:
-    if isinstance(latest, dict):
-        st.metric("Latest Source", latest.get("source", latest.get("source", "-")))
-    else:
-        st.metric("Latest Source", "-")
-with card3:
-    if isinstance(latest, dict):
-        st.metric("Latest Status", latest.get("status", latest.get("status", "-")))
-    else:
-        st.metric("Latest Status", "-")
-with card4:
+latest_rows = None
+latest_source = "-"
+latest_status = "-"
+latest_scanned_at = "-"
+if isinstance(latest, dict):
+    latest_rows = latest.get("rows_count") if latest.get("rows_count") is not None else latest.get("rows")
+    latest_source = latest.get("source", latest_source)
+    latest_status = latest.get("status", latest_status)
+    latest_scanned_at = str(latest.get("scanned_at", latest_scanned_at))
+
+st.subheader("Overview")
+overview_col1, overview_col2, overview_col3, overview_col4 = st.columns(4)
+with overview_col1:
+    st.metric("Latest Rows", latest_rows if latest_rows is not None else "-")
+with overview_col2:
+    st.metric("Latest Source", latest_source)
+with overview_col3:
+    st.metric("Latest Status", latest_status)
+with overview_col4:
     st.metric("Signal Count", len(signals))
 
-status_col1, status_col2 = st.columns(2)
-with status_col1:
+st.caption(f"Latest Scan Time: {latest_scanned_at}")
+
+health_col1, health_col2 = st.columns(2)
+with health_col1:
     st.subheader("Data Source Health")
     st.json(source_statuses)
-with status_col2:
-    st.subheader("Data Source Status")
+with health_col2:
+    st.subheader("Data Source Snapshot")
     if db_error:
         st.warning(f"DB read failed, fallback to file. Error: {db_error}")
     if latest:
@@ -150,27 +141,22 @@ with status_col2:
     else:
         st.info("No scan result yet. Run scripts/run_pipeline.py first.")
 
-col1, col2 = st.columns(2)
-
-with col1:
+signal_col1, signal_col2 = st.columns(2)
+with signal_col1:
     st.subheader("Signals")
     if signals:
         st.json(signals)
     else:
         st.write("No signals detected.")
-
-with col2:
+with signal_col2:
     st.subheader("Signal Statistics")
     if signals:
         type_counter = Counter([s.get("type", "unknown") for s in signals])
         strength_counter = Counter([s.get("strength", "unknown") for s in signals])
-        stat_col1, stat_col2 = st.columns(2)
-        with stat_col1:
-            st.write("By type")
-            st.json(type_counter)
-        with stat_col2:
-            st.write("By strength")
-            st.json(strength_counter)
+        st.write("By type")
+        st.json(type_counter)
+        st.write("By strength")
+        st.json(strength_counter)
     else:
         st.write("No signal stats yet.")
 
@@ -180,11 +166,11 @@ if recent_scans:
 else:
     st.write("No recent scan records found.")
 
-st.subheader("Raw Result")
-if latest:
-    if "payload" in latest and isinstance(latest["payload"], dict):
-        st.code(json.dumps(latest["payload"], ensure_ascii=False, indent=2), language="json")
+with st.expander("Raw Result"):
+    if latest:
+        if "payload" in latest and isinstance(latest["payload"], dict):
+            st.code(json.dumps(latest["payload"], ensure_ascii=False, indent=2), language="json")
+        else:
+            st.code(json.dumps(latest, ensure_ascii=False, indent=2), language="json")
     else:
-        st.code(json.dumps(latest, ensure_ascii=False, indent=2), language="json")
-else:
-    st.write("No result file found.")
+        st.write("No result file found.")
