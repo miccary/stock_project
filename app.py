@@ -132,6 +132,11 @@ with overview_col3:
 with overview_col4:
     st.metric("Signal Count", len(signals))
 
+if latest_source == "sample" or latest_status == "fallback":
+    st.warning("Dashboard is showing fallback/sample data, not live Tushare daily data.")
+else:
+    st.success(f"Dashboard is showing live data from {latest_source}.")
+
 st.caption(f"Latest Scan Time: {latest_scanned_at}")
 
 health_col1, health_col2 = st.columns(2)
