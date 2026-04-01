@@ -10,6 +10,16 @@ from pathlib import Path
 import streamlit as st
 
 try:
+    import akshare as ak
+except Exception:
+    ak = None
+
+try:
+    import tushare as ts
+except Exception:
+    ts = None
+
+try:
     import psycopg2
     from psycopg2.extras import RealDictCursor
 except Exception:
@@ -60,6 +70,38 @@ def extract_signals(latest):
     return latest.get("signals", [])
 
 
+def get_source_statuses():
+    statuses = {
+        "akshare": "unknown",
+        "tushare": "unknown",
+        "postgres": "unknown",
+    }
+    if ak is not None:
+        try:
+            statuses["akshare"] = "import_ok"
+        except Exception:
+            statuses["akshare"] = "import_fail"
+    else:
+        statuses["akshare"] = "import_fail"
+    if ts is not None:
+        try:
+            statuses["tushare"] = "import_ok"
+        except Exception:
+            statuses["tushare"] = "import_fail"
+    else:
+        statuses["tushare"] = "import_fail"
+    if psycopg2 is not None:
+        try:
+            conn = psycopg2.connect(DATABASE_URL)
+            conn.close()
+            statuses["postgres"] = "connected"
+        except Exception:
+            statuses["postgres"] = "connect_fail"
+    else:
+        statuses["postgres"] = "import_fail"
+    return statuses
+
+
 latest = None
 db_error = None
 recent_scans = []
@@ -73,10 +115,30 @@ if latest is None:
     latest = read_latest_scan_from_file()
 
 signals = extract_signals(latest)
+source_statuses = get_source_statuses()
 
-col1, col2 = st.columns(2)
+# Summary cards
+card1, card2, card3, card4 = st.columns(4)
+with card1:
+    st.metric("Latest Rows", latest.get("rows_count") if isinstance(latest, dict) and latest.get("rows_count") is not None else (latest.get("rows") if isinstance(latest, dict) else "-"))
+with card2:
+    if isinstance(latest, dict):
+        st.metric("Latest Source", latest.get("source", latest.get("source", "-")))
+    else:
+        st.metric("Latest Source", "-")
+with card3:
+    if isinstance(latest, dict):
+        st.metric("Latest Status", latest.get("status", latest.get("status", "-")))
+    else:
+        st.metric("Latest Status", "-")
+with card4:
+    st.metric("Signal Count", len(signals))
 
-with col1:
+status_col1, status_col2 = st.columns(2)
+with status_col1:
+    st.subheader("Data Source Health")
+    st.json(source_statuses)
+with status_col2:
     st.subheader("Data Source Status")
     if db_error:
         st.warning(f"DB read failed, fallback to file. Error: {db_error}")
@@ -88,26 +150,29 @@ with col1:
     else:
         st.info("No scan result yet. Run scripts/run_pipeline.py first.")
 
-with col2:
+col1, col2 = st.columns(2)
+
+with col1:
     st.subheader("Signals")
     if signals:
         st.json(signals)
     else:
         st.write("No signals detected.")
 
-st.subheader("Signal Statistics")
-if signals:
-    type_counter = Counter([s.get("type", "unknown") for s in signals])
-    strength_counter = Counter([s.get("strength", "unknown") for s in signals])
-    stat_col1, stat_col2 = st.columns(2)
-    with stat_col1:
-        st.write("By type")
-        st.json(type_counter)
-    with stat_col2:
-        st.write("By strength")
-        st.json(strength_counter)
-else:
-    st.write("No signal stats yet.")
+with col2:
+    st.subheader("Signal Statistics")
+    if signals:
+        type_counter = Counter([s.get("type", "unknown") for s in signals])
+        strength_counter = Counter([s.get("strength", "unknown") for s in signals])
+        stat_col1, stat_col2 = st.columns(2)
+        with stat_col1:
+            st.write("By type")
+            st.json(type_counter)
+        with stat_col2:
+            st.write("By strength")
+            st.json(strength_counter)
+    else:
+        st.write("No signal stats yet.")
 
 st.subheader("Recent Scan Records")
 if recent_scans:
