@@ -59,6 +59,28 @@ def read_recent_scans_from_db(limit: int = 10):
         conn.close()
 
 
+def read_recent_signals_from_db(limit: int = 50):
+    if not DATABASE_URL or psycopg2 is None:
+        return []
+    conn = psycopg2.connect(DATABASE_URL)
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT recorded_at, source, symbol, signal_type, signal_name, strength, payload
+                FROM signals
+                ORDER BY recorded_at DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            return [dict(row) for row in cur.fetchall()]
+    except Exception:
+        return []
+    finally:
+        conn.close()
+
+
 def read_latest_scan_from_file():
     if not RESULT_PATH.exists():
         return None
@@ -110,6 +132,7 @@ latest = recent_scans[0] if recent_scans else read_latest_scan_from_file()
 signals = extract_signals(latest)
 source_statuses = get_source_statuses()
 stock_basic_df = read_stock_basic_cache()
+recent_signals = read_recent_signals_from_db(limit=50)
 
 latest_rows = None
 latest_source = "-"
@@ -173,6 +196,22 @@ with signal_col2:
         st.json(strength_counter)
     else:
         st.write("No signal stats yet.")
+
+st.subheader("Signal History")
+if recent_signals:
+    signal_rows = []
+    for row in recent_signals:
+        signal_rows.append({
+            "recorded_at": row.get("recorded_at"),
+            "source": row.get("source"),
+            "symbol": row.get("symbol"),
+            "signal_type": row.get("signal_type"),
+            "signal_name": row.get("signal_name"),
+            "strength": row.get("strength"),
+        })
+    st.dataframe(signal_rows, use_container_width=True)
+else:
+    st.write("No signal history found yet. Run scripts/record_signal.py after a scan.")
 
 st.subheader("Stock Pool Cache")
 if stock_basic_df is not None:
