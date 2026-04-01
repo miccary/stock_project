@@ -18,33 +18,36 @@ except Exception:
 
 ROOT = Path(__file__).resolve().parent
 RESULT_PATH = ROOT / "data" / "processed" / "daily_scan_result.json"
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:112345@localhost:5432/postgres")
 
 
 st.set_page_config(page_title="stock_project", layout="wide")
 st.title("stock_project - Phase 1 Dashboard")
 
 
-def read_latest_scan_from_db():
+def read_recent_scans_from_db(limit: int = 10):
     if not DATABASE_URL or psycopg2 is None:
-        return None
+        return []
     conn = psycopg2.connect(DATABASE_URL)
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT scanned_at, source, status, symbol, rows_count, error, payload
+                SELECT scanned_at, source, status, symbol, rows_count, error
                 FROM scan_runs
                 ORDER BY scanned_at DESC
-                LIMIT 1
-                """
+                LIMIT %s
+                """,
+                (limit,),
             )
-            row = cur.fetchone()
-            if not row:
-                return None
-            return dict(row)
+            return [dict(row) for row in cur.fetchall()]
     finally:
         conn.close()
+
+
+def read_latest_scan_from_db():
+    scans = read_recent_scans_from_db(limit=1)
+    return scans[0] if scans else None
 
 
 def read_latest_scan_from_file():
@@ -55,8 +58,10 @@ def read_latest_scan_from_file():
 
 latest = None
 db_error = None
+recent_scans = []
 try:
-    latest = read_latest_scan_from_db()
+    recent_scans = read_recent_scans_from_db(limit=10)
+    latest = recent_scans[0] if recent_scans else None
 except Exception as e:
     db_error = str(e)
 
@@ -75,7 +80,7 @@ with col1:
         else:
             st.json(latest.get("source", latest))
     else:
-        st.info("No scan result yet. Run scripts/run_daily_scan.py first.")
+        st.info("No scan result yet. Run scripts/run_pipeline.py first.")
 
 with col2:
     st.subheader("Signals")
@@ -90,6 +95,12 @@ with col2:
             st.write("No signals detected.")
     else:
         st.write("No signals yet.")
+
+st.subheader("Recent Scan Records")
+if recent_scans:
+    st.dataframe(recent_scans, use_container_width=True)
+else:
+    st.write("No recent scan records found.")
 
 st.subheader("Raw Result")
 if latest:
