@@ -1,4 +1,4 @@
-"""Run scan -> save result to PostgreSQL -> print summary."""
+"""Run scan -> save result to PostgreSQL -> record signals -> print summary."""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ def run(cmd):
 def main() -> None:
     run(["scripts/run_daily_scan.py"])
     run(["scripts/save_scan_result.py"])
+    run(["scripts/record_signal.py"])
 
 
 if __name__ == "__main__":
