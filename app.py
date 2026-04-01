@@ -3,33 +3,87 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import streamlit as st
 
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+except Exception:
+    psycopg2 = None
+    RealDictCursor = None
+
 
 ROOT = Path(__file__).resolve().parent
 RESULT_PATH = ROOT / "data" / "processed" / "daily_scan_result.json"
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 st.set_page_config(page_title="stock_project", layout="wide")
 st.title("stock_project - Phase 1 Dashboard")
 
+
+def read_latest_scan_from_db():
+    if not DATABASE_URL or psycopg2 is None:
+        return None
+    conn = psycopg2.connect(DATABASE_URL)
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT scanned_at, source, status, symbol, rows_count, error, payload
+                FROM scan_runs
+                ORDER BY scanned_at DESC
+                LIMIT 1
+                """
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return dict(row)
+    finally:
+        conn.close()
+
+
+def read_latest_scan_from_file():
+    if not RESULT_PATH.exists():
+        return None
+    return json.loads(RESULT_PATH.read_text(encoding="utf-8"))
+
+
+latest = None
+db_error = None
+try:
+    latest = read_latest_scan_from_db()
+except Exception as e:
+    db_error = str(e)
+
+if latest is None:
+    latest = read_latest_scan_from_file()
+
 col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("Data Source Status")
-    if RESULT_PATH.exists():
-        result = json.loads(RESULT_PATH.read_text(encoding="utf-8"))
-        st.json(result.get("source", {}))
+    if db_error:
+        st.warning(f"DB read failed, fallback to file. Error: {db_error}")
+    if latest:
+        if "payload" in latest and isinstance(latest["payload"], dict):
+            st.json(latest.get("payload", {}).get("source", latest))
+        else:
+            st.json(latest.get("source", latest))
     else:
         st.info("No scan result yet. Run scripts/run_daily_scan.py first.")
 
 with col2:
     st.subheader("Signals")
-    if RESULT_PATH.exists():
-        result = json.loads(RESULT_PATH.read_text(encoding="utf-8"))
-        signals = result.get("signals", [])
+    if latest:
+        if "payload" in latest and isinstance(latest["payload"], dict):
+            signals = latest["payload"].get("signals", [])
+        else:
+            signals = latest.get("signals", [])
         if signals:
             st.json(signals)
         else:
@@ -38,7 +92,10 @@ with col2:
         st.write("No signals yet.")
 
 st.subheader("Raw Result")
-if RESULT_PATH.exists():
-    st.code(RESULT_PATH.read_text(encoding="utf-8"), language="json")
+if latest:
+    if "payload" in latest and isinstance(latest["payload"], dict):
+        st.code(json.dumps(latest["payload"], ensure_ascii=False, indent=2), language="json")
+    else:
+        st.code(json.dumps(latest, ensure_ascii=False, indent=2), language="json")
 else:
     st.write("No result file found.")
