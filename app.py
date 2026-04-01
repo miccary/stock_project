@@ -7,6 +7,7 @@ import os
 from collections import Counter
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 
 try:
@@ -29,6 +30,7 @@ except Exception:
 
 ROOT = Path(__file__).resolve().parent
 RESULT_PATH = ROOT / "data" / "processed" / "daily_scan_result.json"
+STOCK_BASIC_CACHE = ROOT / "data" / "processed" / "stock_basic_cache.csv"
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:112345@localhost:5432/postgres")
 
 
@@ -91,6 +93,12 @@ def get_source_statuses():
     return statuses
 
 
+def read_stock_basic_cache():
+    if not STOCK_BASIC_CACHE.exists():
+        return None
+    return pd.read_csv(STOCK_BASIC_CACHE)
+
+
 recent_scans = []
 db_error = None
 try:
@@ -101,6 +109,7 @@ except Exception as e:
 latest = recent_scans[0] if recent_scans else read_latest_scan_from_file()
 signals = extract_signals(latest)
 source_statuses = get_source_statuses()
+stock_basic_df = read_stock_basic_cache()
 
 latest_rows = None
 latest_source = "-"
@@ -159,6 +168,16 @@ with signal_col2:
         st.json(strength_counter)
     else:
         st.write("No signal stats yet.")
+
+st.subheader("Stock Pool Cache")
+if stock_basic_df is not None:
+    st.metric("Cached Stocks", len(stock_basic_df))
+    if "industry" in stock_basic_df.columns:
+        industry_counts = stock_basic_df["industry"].fillna("Unknown").value_counts().head(10)
+        st.write("Top industries")
+        st.json(industry_counts.to_dict())
+else:
+    st.write("No stock_basic cache found yet. Run scripts/update_stock_basic.py when token/permission is ready.")
 
 st.subheader("Recent Scan Records")
 if recent_scans:
