@@ -1,10 +1,15 @@
 {
-  "rows": 13,
+  "rows": 242,
   "source": {
-    "source": "sample",
-    "status": "fallback",
-    "error": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
-    "symbol": "000001"
+    "source": "tushare",
+    "status": "ok",
+    "symbol": "000001.SZ"
   },
-  "signals": []
+  "signals": [
+    {
+      "type": "trend",
+      "name": "多头排列",
+      "strength": "high"
+    }
+  ]
 }
