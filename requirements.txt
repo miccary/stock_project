@@ -1,0 +1,8 @@
+﻿akshare
+pandas
+numpy
+matplotlib
+openpyxl
+streamlit
+plotly
+tushare
