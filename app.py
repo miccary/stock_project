@@ -1,4 +1,4 @@
-"""Minimal Streamlit dashboard for phase 1."""
+"""第1阶段中文看板：股票研究与交易辅助系统。"""
 
 from __future__ import annotations
 
@@ -35,8 +35,8 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:112345@localhost
 
 
 st.set_page_config(page_title="stock_project", layout="wide")
-st.title("stock_project")
-st.caption("Phase 1 · Stock research and trading-assist dashboard")
+st.title("股票研究与交易辅助系统")
+st.caption("第一阶段 · 中文看板")
 
 
 def read_recent_scans_from_db(limit: int = 10):
@@ -97,21 +97,21 @@ def extract_signals(latest):
 
 def get_source_statuses():
     statuses = {
-        "akshare": "unknown",
-        "tushare": "unknown",
-        "postgres": "unknown",
+        "akshare": "未知",
+        "tushare": "未知",
+        "postgres": "未知",
     }
-    statuses["akshare"] = "import_ok" if ak is not None else "import_fail"
-    statuses["tushare"] = "import_ok" if ts is not None else "import_fail"
+    statuses["akshare"] = "导入成功" if ak is not None else "导入失败"
+    statuses["tushare"] = "导入成功" if ts is not None else "导入失败"
     if psycopg2 is not None:
         try:
             conn = psycopg2.connect(DATABASE_URL)
             conn.close()
-            statuses["postgres"] = "connected"
+            statuses["postgres"] = "已连接"
         except Exception:
-            statuses["postgres"] = "connect_fail"
+            statuses["postgres"] = "连接失败"
     else:
-        statuses["postgres"] = "import_fail"
+        statuses["postgres"] = "导入失败"
     return statuses
 
 
@@ -144,96 +144,106 @@ if isinstance(latest, dict):
     latest_status = latest.get("status", latest_status)
     latest_scanned_at = str(latest.get("scanned_at", latest_scanned_at))
 
-st.subheader("Overview")
+st.subheader("总览")
 overview_col1, overview_col2, overview_col3, overview_col4 = st.columns(4)
 with overview_col1:
-    st.metric("Latest Rows", latest_rows if latest_rows is not None else "-")
+    st.metric("最新行数", latest_rows if latest_rows is not None else "-")
 with overview_col2:
-    st.metric("Latest Source", latest_source)
+    st.metric("最新数据源", latest_source)
 with overview_col3:
-    st.metric("Latest Status", latest_status)
+    st.metric("最新状态", latest_status)
 with overview_col4:
-    st.metric("Signal Count", len(signals))
+    st.metric("信号数量", len(signals))
 
 if latest_source == "sample" or latest_status == "fallback":
-    st.warning("Dashboard is showing fallback/sample data, not live Tushare daily data.")
+    st.warning("当前看板显示的是回退/样例数据，不是实时 Tushare 日线数据。")
 else:
-    st.success(f"Dashboard is showing live data from {latest_source}.")
+    st.success(f"当前看板显示的是来自 {latest_source} 的实时数据。")
 
-st.caption(f"Latest Scan Time: {latest_scanned_at}")
+st.caption(f"最新扫描时间：{latest_scanned_at}")
 
 health_col1, health_col2 = st.columns(2)
 with health_col1:
-    st.subheader("Data Source Health")
+    st.subheader("数据源健康")
     st.json(source_statuses)
 with health_col2:
-    st.subheader("Data Source Snapshot")
+    st.subheader("数据源快照")
     if db_error:
-        st.warning(f"DB read failed, fallback to file. Error: {db_error}")
+        st.warning(f"数据库读取失败，回退到本地文件。错误：{db_error}")
     if latest:
         if "payload" in latest and isinstance(latest["payload"], dict):
             st.json(latest.get("payload", {}).get("source", latest))
         else:
             st.json(latest.get("source", latest))
     else:
-        st.info("No scan result yet. Run scripts/run_pipeline.py first.")
+        st.info("当前没有扫描结果，请先运行 scripts/run_pipeline.py")
 
 signal_col1, signal_col2 = st.columns(2)
 with signal_col1:
-    st.subheader("Signals")
+    st.subheader("信号列表")
     if signals:
         st.json(signals)
     else:
-        st.write("No signals detected.")
+        st.write("暂无信号。")
 with signal_col2:
-    st.subheader("Signal Statistics")
+    st.subheader("信号统计")
     if signals:
         type_counter = Counter([s.get("type", "unknown") for s in signals])
         strength_counter = Counter([s.get("strength", "unknown") for s in signals])
-        st.write("By type")
+        st.write("按类型统计")
         st.json(type_counter)
-        st.write("By strength")
+        st.write("按强度统计")
         st.json(strength_counter)
     else:
-        st.write("No signal stats yet.")
+        st.write("暂无信号统计。")
 
-st.subheader("Signal History")
+st.subheader("信号历史")
 if recent_signals:
     signal_rows = []
     for row in recent_signals:
         signal_rows.append({
-            "recorded_at": row.get("recorded_at"),
-            "source": row.get("source"),
-            "symbol": row.get("symbol"),
-            "signal_type": row.get("signal_type"),
-            "signal_name": row.get("signal_name"),
-            "strength": row.get("strength"),
+            "记录时间": row.get("recorded_at"),
+            "来源": row.get("source"),
+            "代码": row.get("symbol"),
+            "信号类型": row.get("signal_type"),
+            "信号名称": row.get("signal_name"),
+            "强度": row.get("strength"),
         })
     st.dataframe(signal_rows, use_container_width=True)
 else:
-    st.write("No signal history found yet. Run scripts/record_signal.py after a scan.")
+    st.write("暂无信号历史，请先运行 scripts/record_signal.py")
 
-st.subheader("Stock Pool Cache")
+st.subheader("股票池缓存")
 if stock_basic_df is not None:
-    st.metric("Cached Stocks", len(stock_basic_df))
+    st.metric("缓存股票数", len(stock_basic_df))
     if "industry" in stock_basic_df.columns:
-        industry_counts = stock_basic_df["industry"].fillna("Unknown").value_counts().head(10)
-        st.write("Top industries")
+        industry_counts = stock_basic_df["industry"].fillna("未知").value_counts().head(10)
+        st.write("行业前十")
         st.json(industry_counts.to_dict())
 else:
-    st.write("No stock_basic cache found yet. Run scripts/update_stock_basic.py when token/permission is ready.")
+    st.write("暂无股票池缓存，请在权限/Token 准备好后运行 scripts/update_stock_basic.py")
 
-st.subheader("Recent Scan Records")
+st.subheader("最近扫描记录")
 if recent_scans:
-    st.dataframe(recent_scans, use_container_width=True)
+    display_scans = []
+    for row in recent_scans:
+        display_scans.append({
+            "扫描时间": row.get("scanned_at"),
+            "来源": row.get("source"),
+            "状态": row.get("status"),
+            "代码": row.get("symbol"),
+            "行数": row.get("rows_count"),
+            "错误": row.get("error"),
+        })
+    st.dataframe(display_scans, use_container_width=True)
 else:
-    st.write("No recent scan records found.")
+    st.write("暂无扫描记录。")
 
-with st.expander("Raw Result"):
+with st.expander("原始结果"):
     if latest:
         if "payload" in latest and isinstance(latest["payload"], dict):
             st.code(json.dumps(latest["payload"], ensure_ascii=False, indent=2), language="json")
         else:
             st.code(json.dumps(latest, ensure_ascii=False, indent=2), language="json")
     else:
-        st.write("No result file found.")
+        st.write("暂无原始结果。")
