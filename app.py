@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from collections import Counter
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -31,7 +32,9 @@ except Exception:
 ROOT = Path(__file__).resolve().parent
 RESULT_PATH = ROOT / "data" / "processed" / "daily_scan_result.json"
 STOCK_BASIC_CACHE = ROOT / "data" / "processed" / "stock_basic_cache.csv"
+STOCK_BASIC_META = ROOT / "data" / "processed" / "stock_basic_cache_meta.json"
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:112345@localhost:5432/postgres")
+CACHE_TTL_HOURS = int(os.getenv("STOCK_BASIC_CACHE_TTL_HOURS", "24"))
 
 
 st.set_page_config(page_title="stock_project", layout="wide")
@@ -121,6 +124,25 @@ def read_stock_basic_cache():
     return pd.read_csv(STOCK_BASIC_CACHE)
 
 
+def read_stock_basic_meta():
+    if not STOCK_BASIC_META.exists():
+        return None
+    try:
+        return json.loads(STOCK_BASIC_META.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def is_stock_basic_fresh(meta):
+    if not meta or "fetched_at" not in meta:
+        return False
+    try:
+        fetched_at = datetime.fromisoformat(meta["fetched_at"])
+        return datetime.now() - fetched_at < timedelta(hours=CACHE_TTL_HOURS)
+    except Exception:
+        return False
+
+
 recent_scans = []
 db_error = None
 try:
@@ -132,6 +154,7 @@ latest = recent_scans[0] if recent_scans else read_latest_scan_from_file()
 signals = extract_signals(latest)
 source_statuses = get_source_statuses()
 stock_basic_df = read_stock_basic_cache()
+stock_basic_meta = read_stock_basic_meta()
 recent_signals = read_recent_signals_from_db(limit=50)
 
 latest_rows = None
@@ -216,6 +239,9 @@ else:
 st.subheader("股票池缓存")
 if stock_basic_df is not None:
     st.metric("缓存股票数", len(stock_basic_df))
+    if stock_basic_meta:
+        fresh_text = "新鲜" if is_stock_basic_fresh(stock_basic_meta) else "已过期"
+        st.caption(f"股票池缓存状态：{fresh_text} · 上次刷新：{stock_basic_meta.get('fetched_at', '-')}")
     if "industry" in stock_basic_df.columns:
         industry_counts = stock_basic_df["industry"].fillna("未知").value_counts().head(10)
         st.write("行业前十")
