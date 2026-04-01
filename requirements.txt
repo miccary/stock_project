@@ -1,4 +1,4 @@
-﻿akshare
+akshare
 pandas
 numpy
 matplotlib
@@ -6,3 +6,4 @@ openpyxl
 streamlit
 plotly
 tushare
+psycopg2-binary
