@@ -1,0 +1,10 @@
+{
+  "rows": 13,
+  "source": {
+    "source": "sample",
+    "status": "fallback",
+    "error": "('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+    "symbol": "000001"
+  },
+  "signals": []
+}
